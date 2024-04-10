@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+
+members = ["core/nosy"]
+
+[workspace.package]
+repository = "https://github.com/vc-souza/nosy"
+authors = ["Vinícius Souza <vinicius.cp.souza@gmail.com>"]
+
+categories = []  # TODO: add
+keywords = []  # TODO: add
+
+edition = "2021"
+rust-version = "1.77.0"
+
+license = "MIT"
+readme = "README.md"
