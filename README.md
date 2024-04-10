@@ -1,0 +1,2 @@
+# nosy
+Rust Dependency Insights
