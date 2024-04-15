@@ -30,6 +30,9 @@ pub struct Package {
     dependencies: Option<Vec<Dependency>>,
 }
 
+#[derive(Debug)]
+pub struct Packages(Vec<Package>);
+
 impl TryFrom<String> for Dependency {
     type Error = String;
 
@@ -78,5 +81,25 @@ impl TryFrom<Table> for Package {
                 _ => None,
             },
         })
+    }
+}
+
+impl TryFrom<String> for Packages {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let mut root = value.parse::<Table>().map_err(|e| e.to_string())?;
+
+        match root.remove("package") {
+            Some(Value::Array(arr)) => Ok(Packages(
+                arr.into_iter()
+                    .filter_map(|v| match v {
+                        Value::Table(t) => Package::try_from(t).ok(),
+                        _ => None,
+                    })
+                    .collect(),
+            )),
+            _ => Err(String::from("Unable to read package list.")),
+        }
     }
 }
