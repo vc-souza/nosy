@@ -1,6 +1,5 @@
-use nosy::graph::Packages;
+use nosy::graph::{PackageIdentity, PackageIndex};
 use std::{env, error::Error, fs};
-use toml::{Table, Value};
 
 // 1. Record Vertices (Packages)
 // 2. Record Edges (Dependencies)
@@ -13,9 +12,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let path = args.next().unwrap_or(String::from("./Cargo.lock"));
 
-    let packages = Packages::try_from(fs::read_to_string(path)?)?;
+    let packages = PackageIndex::try_from(fs::read_to_string(path)?)?;
 
-    println!("{:#?}", packages);
+    // println!("{:#?}", packages);
+
+    if let Some(v) = packages.search(&PackageIdentity {
+        name: String::from("serde"),
+        version: None,
+    }) {
+        println!("{:#?}", v);
+    }
 
     Ok(())
 }
