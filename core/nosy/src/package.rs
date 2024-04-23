@@ -5,11 +5,17 @@ use std::str::FromStr;
 use toml::{Table, Value};
 
 /// TODO: doc
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Version(String);
 
+impl Version {
+    pub fn new(s: String) -> Self {
+        Self(s)
+    }
+}
+
 /// TODO: doc
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Identifier {
     pub name: String,
     pub version: Option<Version>,
@@ -86,10 +92,147 @@ impl TryFrom<Table> for Adjacency {
 }
 
 /// TODO: doc
-type Index = HashMap<Identifier, Rc<Package>>;
+pub struct DependencyGraph {
+    index: HashMap<Identifier, Rc<Package>>,
+    incoming: HashMap<Identifier, Vec<Weak<Package>>>,
+    outgoing: HashMap<Identifier, Vec<Rc<Package>>>,
+}
 
-/// TODO: doc
-type Outgoing = HashMap<Identifier, Option<Vec<Rc<Package>>>>;
+impl DependencyGraph {
+    /// TODO: doc
+    pub fn new() -> Self {
+        Self {
+            index: HashMap::new(),
+            incoming: HashMap::new(),
+            outgoing: HashMap::new(),
+        }
+    }
 
-/// TODO: doc
-type Incoming = HashMap<Identifier, Option<Vec<Weak<Package>>>>;
+    /// TODO: doc
+    pub fn add_package(&mut self, package: &Rc<Package>) -> () {
+        // specific version
+        self.index.insert(
+            Identifier {
+                name: package.id.name.to_owned(),
+                version: package.id.version.to_owned(),
+            },
+            Rc::clone(package),
+        );
+
+        // default version
+        self.index.insert(
+            Identifier {
+                name: package.id.name.to_owned(),
+                version: None,
+            },
+            Rc::clone(package),
+        );
+    }
+
+    /// TODO: doc
+    pub fn register_dependency(&mut self, package: &Rc<Package>, dependency: &Identifier) -> () {
+        let dependencies = match self.outgoing.get_mut(&package.id) {
+            Some(deps) => deps,
+            None => {
+                self.outgoing.insert(
+                    Identifier {
+                        name: package.id.name.to_owned(),
+                        version: package.id.version.to_owned(),
+                    },
+                    Vec::with_capacity(1),
+                );
+
+                self.outgoing
+                    .get_mut(&package.id)
+                    .expect("The entry was just inserted")
+            }
+        };
+
+        dependencies.push(Rc::clone(
+            self.index
+                .get(&dependency)
+                .expect("The package should have been added to the index"),
+        ));
+
+        let references = match self.incoming.get_mut(dependency) {
+            Some(refs) => refs,
+            None => {
+                self.incoming.insert(
+                    Identifier {
+                        name: dependency.name.to_owned(),
+                        version: dependency.version.to_owned(),
+                    },
+                    Vec::with_capacity(1),
+                );
+
+                self.incoming
+                    .get_mut(dependency)
+                    .expect("The entry was just inserted")
+            }
+        };
+
+        references.push(Rc::downgrade(package));
+    }
+
+    /// TODO: doc
+    pub fn search(&self, identifier: &Identifier) -> Option<&Package> {
+        match self.index.get(identifier) {
+            Some(p) => Some(p.as_ref()),
+            _ => None,
+        }
+    }
+
+    /// TODO: doc
+    pub fn incoming_edges(&self, identifier: &Identifier) -> Option<Vec<Option<Rc<Package>>>> {
+        match self.incoming.get(identifier) {
+            Some(edges) => Some(edges.iter().map(|w| w.upgrade()).collect()),
+            None => None,
+        }
+    }
+
+    pub fn outgoing_edges(&self, identifier: &Identifier) -> Option<&Vec<Rc<Package>>> {
+        match self.outgoing.get(identifier) {
+            Some(edges) => Some(edges),
+            None => None,
+        }
+    }
+}
+
+impl FromStr for DependencyGraph {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut root = s.parse::<Table>().map_err(|e| e.to_string())?;
+
+        match root.remove("package") {
+            Some(Value::Array(arr)) => {
+                let mut graph = DependencyGraph::new();
+
+                let adjacencies: Vec<Adjacency> = arr
+                    .into_iter()
+                    .filter_map(|v| match v {
+                        Value::Table(t) => Some(Adjacency::try_from(t).ok()?),
+                        _ => None,
+                    })
+                    .collect();
+
+                for Adjacency(package, _) in &adjacencies {
+                    graph.add_package(package);
+                }
+
+                for Adjacency(package, dependencies) in adjacencies {
+                    if let Some(dependencies) = dependencies {
+                        for dependency in &dependencies {
+                            graph.register_dependency(&package, dependency);
+                        }
+                    }
+                }
+
+                Ok(graph)
+            }
+            _ => return Err(String::from("Invalid package list")),
+        }
+    }
+}
+
+// TODO: test!
