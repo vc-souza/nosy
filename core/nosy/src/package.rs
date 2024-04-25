@@ -148,25 +148,26 @@ impl DependencyGraph {
             }
         };
 
-        dependencies.push(Rc::clone(
-            self.index
-                .get(&dependency)
-                .expect("The package should have been added to the index"),
-        ));
+        let resolved = self
+            .index
+            .get(&dependency)
+            .expect("The package should have been added to the index");
 
-        let references = match self.incoming.get_mut(dependency) {
+        dependencies.push(Rc::clone(resolved));
+
+        let references = match self.incoming.get_mut(&resolved.id) {
             Some(refs) => refs,
             None => {
                 self.incoming.insert(
                     Identifier {
-                        name: dependency.name.to_owned(),
-                        version: dependency.version.to_owned(),
+                        name: resolved.id.name.to_owned(),
+                        version: resolved.id.version.to_owned(),
                     },
                     Vec::with_capacity(1),
                 );
 
                 self.incoming
-                    .get_mut(dependency)
+                    .get_mut(&resolved.id)
                     .expect("The entry was just inserted")
             }
         };
@@ -184,15 +185,21 @@ impl DependencyGraph {
 
     /// TODO: doc
     pub fn incoming_edges(&self, identifier: &Identifier) -> Option<Vec<Option<Rc<Package>>>> {
-        match self.incoming.get(identifier) {
-            Some(edges) => Some(edges.iter().map(|w| w.upgrade()).collect()),
+        match self.index.get(identifier) {
+            Some(pkg) => match self.incoming.get(&pkg.id) {
+                Some(edges) => Some(edges.iter().map(|w| w.upgrade()).collect()),
+                None => None,
+            },
             None => None,
         }
     }
 
     pub fn outgoing_edges(&self, identifier: &Identifier) -> Option<&Vec<Rc<Package>>> {
-        match self.outgoing.get(identifier) {
-            Some(edges) => Some(edges),
+        match self.index.get(identifier) {
+            Some(pkg) => match self.outgoing.get(&pkg.id) {
+                Some(edges) => Some(edges),
+                None => None,
+            },
             None => None,
         }
     }

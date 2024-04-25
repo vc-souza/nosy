@@ -12,9 +12,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         fs::read_to_string(args.next().unwrap_or(String::from(DEFAULT_SAMPLE_PATH)))?.parse()?;
 
     let query = Identifier {
-        name: String::from("addr2line"),
-        // version: Some(Version::new(String::from("0.21.0"))),
+        name: String::from("serde"),
         version: None,
+        // version: Some(Version::new(String::from("0.21.0"))),
     };
 
     println!("Entry: {:#?}", graph.search(&query));
