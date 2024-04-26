@@ -1,4 +1,4 @@
-use nosy::package::{DependencyGraph, Identifier, Version};
+use nosy::package::{DependencyGraph, Identifier};
 use std::{env, error::Error, fs};
 
 const DEFAULT_SAMPLE_PATH: &str = "samples/tauri/Cargo.lock";
@@ -8,18 +8,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     args.next();
 
-    let graph: DependencyGraph =
-        fs::read_to_string(args.next().unwrap_or(String::from(DEFAULT_SAMPLE_PATH)))?.parse()?;
+    let filepath = args.next().unwrap_or(String::from(DEFAULT_SAMPLE_PATH));
+    let graph: DependencyGraph = fs::read_to_string(filepath)?.parse()?;
 
-    let query = Identifier {
-        name: String::from("serde"),
-        version: None,
-        // version: Some(Version::new(String::from("0.21.0"))),
+    let report = |query| {
+        println!("Entry: {:#?}", graph.search(query));
+        println!("In: {:#?}", graph.incoming_edges(query));
+        println!("Out: {:#?}", graph.outgoing_edges(query));
     };
 
-    println!("Entry: {:#?}", graph.search(&query));
-    println!("In: {:#?}", graph.incoming_edges(&query));
-    println!("Out: {:#?}", graph.outgoing_edges(&query));
+    let partial_query = Identifier::simple("serde");
+    let full_query = Identifier::full("urlpattern", "0.2.0");
+
+    report(&partial_query);
+    report(&full_query);
 
     Ok(())
 }

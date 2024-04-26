@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::error::Error;
 use std::rc::{Rc, Weak};
 use std::str::FromStr;
 use toml::{Table, Value};
@@ -37,6 +38,28 @@ impl FromStr for Identifier {
                 None => None,
             },
         })
+    }
+}
+
+impl Identifier {
+    /// TODO: doc
+    pub fn simple<T: Into<String>>(name: T) -> Self {
+        Self {
+            name: name.into(),
+            version: None,
+        }
+    }
+
+    /// TODO: doc
+    pub fn full<T, U>(name: T, version: U) -> Self
+    where
+        T: Into<String>,
+        U: Into<String>,
+    {
+        Self {
+            name: name.into(),
+            version: Some(Version(version.into())),
+        }
     }
 }
 
@@ -130,7 +153,15 @@ impl DependencyGraph {
     }
 
     /// TODO: doc
-    pub fn register_dependency(&mut self, package: &Rc<Package>, dependency: &Identifier) -> () {
+    pub fn register_dependency(
+        &mut self,
+        package: &Rc<Package>,
+        dependency: &Identifier,
+    ) -> Result<(), Box<dyn Error>> {
+        let resolved_dependency = self.index.get(&dependency).ok_or(String::from(
+            "The package should have been added to the index",
+        ))?;
+
         let dependencies = match self.outgoing.get_mut(&package.id) {
             Some(deps) => deps,
             None => {
@@ -144,64 +175,52 @@ impl DependencyGraph {
 
                 self.outgoing
                     .get_mut(&package.id)
-                    .expect("The entry was just inserted")
+                    .ok_or(String::from("The entry was just inserted"))?
             }
         };
 
-        let resolved = self
-            .index
-            .get(&dependency)
-            .expect("The package should have been added to the index");
+        dependencies.push(Rc::clone(resolved_dependency));
 
-        dependencies.push(Rc::clone(resolved));
-
-        let references = match self.incoming.get_mut(&resolved.id) {
+        let back_references = match self.incoming.get_mut(&resolved_dependency.id) {
             Some(refs) => refs,
             None => {
                 self.incoming.insert(
                     Identifier {
-                        name: resolved.id.name.to_owned(),
-                        version: resolved.id.version.to_owned(),
+                        name: resolved_dependency.id.name.to_owned(),
+                        version: resolved_dependency.id.version.to_owned(),
                     },
                     Vec::with_capacity(1),
                 );
 
                 self.incoming
-                    .get_mut(&resolved.id)
-                    .expect("The entry was just inserted")
+                    .get_mut(&resolved_dependency.id)
+                    .ok_or(String::from("The entry was just inserted"))?
             }
         };
 
-        references.push(Rc::downgrade(package));
+        back_references.push(Rc::downgrade(package));
+
+        Ok(())
     }
 
     /// TODO: doc
     pub fn search(&self, identifier: &Identifier) -> Option<&Package> {
-        match self.index.get(identifier) {
-            Some(p) => Some(p.as_ref()),
-            _ => None,
-        }
+        Some(self.index.get(identifier)?.as_ref())
     }
 
     /// TODO: doc
     pub fn incoming_edges(&self, identifier: &Identifier) -> Option<Vec<Option<Rc<Package>>>> {
-        match self.index.get(identifier) {
-            Some(pkg) => match self.incoming.get(&pkg.id) {
-                Some(edges) => Some(edges.iter().map(|w| w.upgrade()).collect()),
-                None => None,
-            },
-            None => None,
-        }
+        Some(
+            self.incoming
+                .get(&(self.index.get(identifier)?).id)?
+                .iter()
+                .map(|w| w.upgrade())
+                .collect(),
+        )
     }
 
     pub fn outgoing_edges(&self, identifier: &Identifier) -> Option<&Vec<Rc<Package>>> {
-        match self.index.get(identifier) {
-            Some(pkg) => match self.outgoing.get(&pkg.id) {
-                Some(edges) => Some(edges),
-                None => None,
-            },
-            None => None,
-        }
+        self.outgoing.get(&(self.index.get(identifier)?).id)
     }
 }
 
@@ -230,7 +249,9 @@ impl FromStr for DependencyGraph {
                 for Adjacency(package, dependencies) in adjacencies {
                     if let Some(dependencies) = dependencies {
                         for dependency in &dependencies {
-                            graph.register_dependency(&package, dependency);
+                            graph
+                                .register_dependency(&package, dependency)
+                                .map_err(|e| e.to_string())?;
                         }
                     }
                 }
