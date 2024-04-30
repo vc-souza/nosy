@@ -1,3 +1,5 @@
+//! TODO: doc
+
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::error::Error;
@@ -5,71 +7,9 @@ use std::rc::{Rc, Weak};
 use std::str::FromStr;
 use toml::{Table, Value};
 
-/// TODO: doc
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct Version(String);
+pub use data::{Identifier, Package, Version};
 
-impl Version {
-    pub fn new(s: String) -> Self {
-        Self(s)
-    }
-}
-
-/// TODO: doc
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct Identifier {
-    pub name: String,
-    pub version: Option<Version>,
-}
-
-impl FromStr for Identifier {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut i = s.split(" ");
-
-        Ok(Self {
-            name: match i.next() {
-                Some(n) => String::from(n),
-                None => return Err(String::from("Empty package name")),
-            },
-            version: match i.next() {
-                Some(v) => Some(Version(String::from(v))),
-                None => None,
-            },
-        })
-    }
-}
-
-impl Identifier {
-    /// TODO: doc
-    pub fn simple<T: Into<String>>(name: T) -> Self {
-        Self {
-            name: name.into(),
-            version: None,
-        }
-    }
-
-    /// TODO: doc
-    pub fn full<T, U>(name: T, version: U) -> Self
-    where
-        T: Into<String>,
-        U: Into<String>,
-    {
-        Self {
-            name: name.into(),
-            version: Some(Version(version.into())),
-        }
-    }
-}
-
-/// TODO: doc
-#[derive(Debug)]
-pub struct Package {
-    pub id: Identifier,
-    pub source: Option<String>,
-    pub checksum: Option<String>,
-}
+mod data;
 
 /// TODO: doc
 struct Adjacency(Rc<Package>, Option<Vec<Identifier>>);
@@ -86,7 +26,7 @@ impl TryFrom<Table> for Adjacency {
                         _ => return Err(String::from("Invalid package name")),
                     },
                     version: match value.remove("version") {
-                        Some(Value::String(s)) => Some(Version(s)),
+                        Some(Value::String(s)) => Some(Version::new(s)),
                         _ => return Err(String::from("Invalid package version")),
                     },
                 },
@@ -158,8 +98,9 @@ impl DependencyGraph {
         package: &Rc<Package>,
         dependency: &Identifier,
     ) -> Result<(), Box<dyn Error>> {
-        let resolved_dependency = self.index.get(&dependency).ok_or(String::from(
-            "The package should have been added to the index",
+        let resolved_dependency = self.index.get(&dependency).ok_or(format!(
+            "Unable to find package for dependency {}",
+            &dependency.name
         ))?;
 
         let dependencies = match self.outgoing.get_mut(&package.id) {
@@ -212,7 +153,7 @@ impl DependencyGraph {
     pub fn incoming_edges(&self, identifier: &Identifier) -> Option<Vec<Option<Rc<Package>>>> {
         Some(
             self.incoming
-                .get(&(self.index.get(identifier)?).id)?
+                .get(&(self.search(identifier)?.id))?
                 .iter()
                 .map(|w| w.upgrade())
                 .collect(),
@@ -220,7 +161,7 @@ impl DependencyGraph {
     }
 
     pub fn outgoing_edges(&self, identifier: &Identifier) -> Option<&Vec<Rc<Package>>> {
-        self.outgoing.get(&(self.index.get(identifier)?).id)
+        self.outgoing.get(&(self.search(identifier)?.id))
     }
 }
 

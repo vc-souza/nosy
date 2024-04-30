@@ -1,4 +1,4 @@
-use nosy::package::{DependencyGraph, Identifier};
+use nosy::graph::{DependencyGraph, Identifier};
 use std::{env, error::Error, fs};
 
 const DEFAULT_SAMPLE_PATH: &str = "samples/tauri/Cargo.lock";
@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let partial_query = Identifier::simple("serde");
-    let full_query = Identifier::full("urlpattern", "0.2.0");
+    let full_query = Identifier::full(String::from("urlpattern"), "0.2.0");
 
     report(&partial_query);
     report(&full_query);
